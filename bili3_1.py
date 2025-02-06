@@ -12,14 +12,15 @@ import random
 #2025 2 6
 FILE_NAME_MAX_LENGTH = 40
 COOKIE = ""
-DELAY_FIRST = 0.3
-DELAY_LAST = 0.4
+DELAY_FIRST = 0.5
+DELAY_LAST = 0.6
 # =======================
 # 配置类:获取用户输入,保存基本配置信息
 # =======================
 class Config:
 
     def __init__(self, download_dir=None, uid=None, interval=None):
+        self.COOKIE = COOKIE
         self.download_dir = download_dir or self.get_download_dir()
         self.uid = uid or self.get_uid()
         self.interval = interval or self.get_interval()
@@ -29,21 +30,12 @@ class Config:
         # 确保下载目录存在
         if not os.path.exists(self.download_dir):
             os.makedirs(self.download_dir)
-        # 调用 COOKIE 检查函数
-        self.validate_cookie()
-    def validate_cookie(self):
-        """检查 COOKIE 字符串是否为空"""
-        if not self.COOKIE.strip():
-            print("COOKIE 为空，请设置有效的 COOKIE")
-        else:
-            print("COOKIE 设置正确")
-
     def get_download_dir(self):
         download_dir = input("请输入下载目录(默认为 C:\Base1\\bbb\\bili):").strip()
         return download_dir if download_dir else r"C:\Base1\bbb\bili"
 
     def get_uid(self):
-        uid = input("请输入bilibili用户uid(默认为560647):").strip()
+        uid = input("请输入bilibili用户uid(默认为坂坂白 560647):").strip()
         return uid if uid else "560647"
 
     def get_interval(self):
@@ -199,7 +191,7 @@ class DynamicProcessor:
                 content_clean = Utils.sanitize_filename(dynamic_content, FILE_NAME_MAX_LENGTH)
                 # 用短横线替换空格，避免末尾出现多余空白
                 folder_name = f"{time_str}-{content_clean}".replace(" ", "-")
-                folder_name = Utils.sanitize_filename(folder_name)
+                folder_name = Utils.sanitize_filename(folder_name,FILE_NAME_MAX_LENGTH)
                 dynamic_folder = os.path.join(self.config.download_dir, folder_name)
             else:
                 # 如果动态内容为空,则放在 download_dir/null 下,以 dynamic_id 命名子文件夹
@@ -494,7 +486,7 @@ class OperationMenu:
                 print("无效输入，请重新选择")
 
 # =======================
-# 修改后的主函数
+# 主函数
 # =======================
 def main():
     # 初始化配置
