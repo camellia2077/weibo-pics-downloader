@@ -1,7 +1,4 @@
-#保存微博的图片
-#成功保存的 URL 会追加到 saved_urls.txt 文件中,并添加到 URLManager 内存中。
-#保存失败的 URL 会加入 unsaved_urls.txt 文件中,当下次重试保存成功时,再从该文件中删除。
-#函数抽象成类
+#转发中的图片也保存
 import os
 import re
 import time
@@ -12,11 +9,10 @@ import logging
 from urllib.parse import urlparse
 
 # 在此处填写你的微博 Cookie(必需)
-COOKIES = "XS2zt"
-
+COOKIES = "SCF="
 
 # 基础配置
-DEFAULT_UID = "谢安然 2683370593 坂坂白 5491928243"
+DEFAULT_UID = "谢安然 2683370593"
 DEFAULT_SAVE_DIR = "C:\\Base1\\bbb\\weibo"
 SESSION = requests.Session()
 
@@ -126,7 +122,7 @@ class WeiboClient:
         self.uid = uid
 
     def get_containerid(self):
-        """获取用户微博 containerid"""
+        """获取用户微博 """
         profile_url = f"https://m.weibo.cn/api/container/getIndex?type=uid&value={self.uid}"
         try:
             response = SESSION.get(profile_url, timeout=10)
@@ -162,8 +158,15 @@ class WeiboClient:
             time_str = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         content = WeiboUtils.clean_content(mblog.get('text', ''))
         pics = []
+        # 解析当前微博图片
         if 'pics' in mblog:
             for pic in mblog['pics']:
+                if 'large' in pic:
+                    pics.append(pic['large']['url'])
+        # 解析转发微博图片
+        retweeted_status = mblog.get('retweeted_status')
+        if retweeted_status and 'pics' in retweeted_status:
+            for pic in retweeted_status['pics']:
                 if 'large' in pic:
                     pics.append(pic['large']['url'])
         video_url = None
@@ -299,7 +302,9 @@ def setup_logger(save_dir):
 
 
 def main():
-    print("赵喵喵5839848157 半年可见\n")
+    print("赵喵喵5839848157 半年可见")
+    print("Kitaro绮太郎1923024604 半年可见")
+    print("坂坂白 5491928243 半年可见\n")
     uid = input(f"请输入用户ID(默认{DEFAULT_UID}): ") or DEFAULT_UID
     save_dir = input(f"请输入保存目录(默认{DEFAULT_SAVE_DIR}): ") or DEFAULT_SAVE_DIR
     interval = int(input("请输入请求间隔(秒,默认5): ") or 5)
