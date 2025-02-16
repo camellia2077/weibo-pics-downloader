@@ -16,9 +16,6 @@ DEFAULT_UID = "谢安然 2683370593"
 DEFAULT_SAVE_DIR = "C:\\Base1\\bbb\\weibo"
 SESSION = requests.Session()
 
-
-
-
 class URLManager:
     """管理已成功保存的 URL,防止重复下载"""
     def __init__(self):
