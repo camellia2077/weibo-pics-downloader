@@ -6,6 +6,8 @@ import requests
 from datetime import datetime
 import logging
 from urllib.parse import urlparse
+#使其在指定目录下根据用户数字ID获取微博名称并新建一个文件夹
+# 所有生成的txt文件和保存的文件夹都存储在这个新建文件夹中
 
 # 在此处填写你的微博 Cookie(必需)
 COOKIES = ""
@@ -21,22 +23,15 @@ class URLManager:
         self.visited = set()
 
     def add_url(self, url):
-        """
-        添加一个 URL 到 visited 集合中
-        :param url: 目标 URL
-        :return: 如果 URL 已存在返回 False,否则添加后返回 True
-        """
         if url in self.visited:
             return False
         self.visited.add(url)
         return True
 
     def has_url(self, url):
-        """检查 URL 是否已存在(即已经成功保存过)"""
         return url in self.visited
 
     def get_all_urls(self):
-        """获取所有已保存的 URL 列表"""
         return list(self.visited)
 
 
@@ -44,7 +39,6 @@ class FileManager:
     """管理 URL 文件的加载、追加及更新"""
     @staticmethod
     def load_urls(file_path):
-        """加载文件中的 URL 列表(如果文件存在)"""
         if not os.path.exists(file_path):
             return []
         with open(file_path, "r", encoding="utf-8") as f:
@@ -52,13 +46,11 @@ class FileManager:
 
     @staticmethod
     def append_url(file_path, url):
-        """将新的 URL 追加到指定文件中"""
         with open(file_path, "a", encoding="utf-8") as f:
             f.write(url + "\n")
 
     @staticmethod
     def update_unsaved_file(file_path, unsaved_set):
-        """更新 unsaved_urls 文件,将 unsaved_set 中的 URL 全部写入文件"""
         with open(file_path, "w", encoding="utf-8") as f:
             for url in unsaved_set:
                 f.write(url + "\n")
@@ -68,20 +60,17 @@ class WeiboUtils:
     """工具方法集合"""
     @staticmethod
     def clean_content(content):
-        """清理微博内容中的非法字符"""
-        content = re.sub(r'<[^>]+>', '', content)  # 移除 HTML 标签
-        cleaned = re.sub(r'[^\u4e00-\u9fa5a-zA-Z0-9_\-\\s]', '', content)  # 保留中文、字母、数字、下划线、横杠及空格
-        cleaned = re.sub(r'\s+', ' ', cleaned).strip()  # 去除连续空白
-        return cleaned[:20]  # 限制最大长度
+        content = re.sub(r'<[^>]+>', '', content)
+        cleaned = re.sub(r'[^\u4e00-\u9fa5a-zA-Z0-9_\-\\s]', '', content)
+        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+        return cleaned[:20]
 
     @staticmethod
     def get_valid_filename(name):
-        """生成有效的目录名"""
         return re.sub(r'[\\/*?:"<>|]', "", name)
 
     @staticmethod
     def safe_mkdir(path):
-        """安全创建目录,并返回实际创建的路径"""
         try:
             os.makedirs(path, exist_ok=True)
             return path
@@ -92,7 +81,6 @@ class WeiboUtils:
 
     @staticmethod
     def download_media(url, path):
-        """下载媒体文件并返回是否成功"""
         if os.path.exists(path):
             return True
         try:
@@ -118,7 +106,6 @@ class WeiboClient:
         self.uid = uid
 
     def get_containerid(self):
-        """获取用户微博"""
         profile_url = f"https://m.weibo.cn/api/container/getIndex?type=uid&value={self.uid}"
         try:
             response = SESSION.get(profile_url, timeout=10)
@@ -130,8 +117,18 @@ class WeiboClient:
             logging.error(f"获取 containerid 失败:{str(e)}")
         return None
 
+    def get_user_screen_name(self):
+        """获取用户微博名称"""
+        profile_url = f"https://m.weibo.cn/api/container/getIndex?type=uid&value={self.uid}"
+        try:
+            response = SESSION.get(profile_url, timeout=10)
+            data = response.json()
+            return data.get('data', {}).get('userInfo', {}).get('screen_name', '')
+        except Exception as e:
+            logging.error(f"获取用户昵称失败:{str(e)}")
+            return ''
+
     def fetch_list(self, containerid, page=1):
-        """获取微博列表"""
         api_url = f"https://m.weibo.cn/api/container/getIndex?containerid={containerid}&page={page}"
         try:
             response = SESSION.get(api_url, timeout=15)
@@ -142,7 +139,6 @@ class WeiboClient:
         return []
 
     def parse_weibo(self, card):
-        """解析单条微博数据"""
         if not card.get('mblog'):
             return None
         mblog = card['mblog']
@@ -154,37 +150,19 @@ class WeiboClient:
             time_str = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         content = WeiboUtils.clean_content(mblog.get('text', ''))
         pics = []
-        # 解析当前微博图片和 Live Photos
         if 'pics' in mblog:
             for pic in mblog['pics']:
                 if 'live_photo' in pic:
-                    # Live Photo
-                    pics.append({
-                        'type': 'live',
-                        'jpg_url': pic['large']['url'],
-                        'mov_url': pic['live_photo']
-                    })
+                    pics.append({'type': 'live', 'jpg_url': pic['large']['url'], 'mov_url': pic['live_photo']})
                 elif 'large' in pic:
-                    # 普通图片
-                    pics.append({
-                        'type': 'image',
-                        'jpg_url': pic['large']['url']
-                    })
-        # 解析转发微博图片和 Live Photos
+                    pics.append({'type': 'image', 'jpg_url': pic['large']['url']})
         retweeted_status = mblog.get('retweeted_status')
         if retweeted_status and 'pics' in retweeted_status:
             for pic in retweeted_status['pics']:
                 if 'live_photo' in pic:
-                    pics.append({
-                        'type': 'live',
-                        'jpg_url': pic['large']['url'],
-                        'mov_url': pic['live_photo']
-                    })
+                    pics.append({'type': 'live', 'jpg_url': pic['large']['url'], 'mov_url': pic['live_photo']})
                 elif 'large' in pic:
-                    pics.append({
-                        'type': 'image',
-                        'jpg_url': pic['large']['url']
-                    })
+                    pics.append({'type': 'image', 'jpg_url': pic['large']['url']})
         video_url = None
         if 'page_info' in mblog and 'media_info' in mblog['page_info']:
             video_info = mblog['page_info']['media_info']
@@ -198,7 +176,6 @@ class WeiboClient:
         }
 
     def save_weibo(self, weibo, save_dir):
-        """保存单条微博内容"""
         base_dir = os.path.join(save_dir, f"{weibo['time']}-{WeiboUtils.get_valid_filename(weibo['content'])}")
         actual_path = WeiboUtils.safe_mkdir(base_dir)
         txt_path = os.path.join(actual_path, "content.txt")
@@ -212,11 +189,9 @@ class WeiboClient:
                 if not WeiboUtils.download_media(media['jpg_url'], media_path):
                     return False
             elif media['type'] == 'live':
-                # 保存 JPG
                 jpg_path = os.path.join(actual_path, f"live_photo_{media_count}.jpg")
                 if not WeiboUtils.download_media(media['jpg_url'], jpg_path):
                     return False
-                # 保存 MOV
                 mov_path = os.path.join(actual_path, f"live_photo_{media_count}.mov")
                 if not WeiboUtils.download_media(media['mov_url'], mov_path):
                     return False
@@ -228,7 +203,7 @@ class WeiboClient:
 
 
 class WeiboCrawler:
-    """整体爬虫逻辑,负责加载历史记录、抓取、保存微博及更新记录"""
+    """整体爬虫配置"""
     def __init__(self, uid, save_dir, interval):
         self.uid = uid
         self.save_dir = save_dir
@@ -237,13 +212,10 @@ class WeiboCrawler:
         self.url_manager = URLManager()
         self.saved_urls_file = os.path.join(save_dir, "saved_urls.txt")
         self.unsaved_urls_file = os.path.join(save_dir, "unsaved_urls.txt")
-        # 确保 unsaved_urls.txt 文件存在(即使为空)
         if not os.path.exists(self.unsaved_urls_file):
             open(self.unsaved_urls_file, "w", encoding="utf-8").close()
-        # 加载已保存的 URL 到 URLManager 中
         for url in FileManager.load_urls(self.saved_urls_file):
             self.url_manager.add_url(url)
-        # 加载保存失败的 URL 到一个集合 unsaved_set
         self.unsaved_set = set(FileManager.load_urls(self.unsaved_urls_file))
 
     def crawl(self):
@@ -266,13 +238,12 @@ class WeiboCrawler:
                 break
 
             for card in cards:
-                if card.get('card_type') != 9:  # 仅处理原创微博
+                if card.get('card_type') != 9:
                     continue
                 weibo = self.client.parse_weibo(card)
                 if not weibo:
                     continue
                 url = weibo['url']
-                # 如果 URL 已在已保存列表中,则跳过
                 if self.url_manager.has_url(url):
                     logging.info(f"这条已经保存:{url}")
                     continue
@@ -282,17 +253,14 @@ class WeiboCrawler:
                     if self.client.save_weibo(weibo, self.save_dir):
                         success += 1
                         logging.info(f"成功保存:{weibo['content']}")
-                        # 保存成功后:添加到 URLManager 和 saved_urls.txt
                         self.url_manager.add_url(url)
                         FileManager.append_url(self.saved_urls_file, url)
-                        # 如果该 URL 曾在保存失败集合中,则删除
                         if url in self.unsaved_set:
                             self.unsaved_set.remove(url)
                             FileManager.update_unsaved_file(self.unsaved_urls_file, self.unsaved_set)
                     else:
                         failed += 1
                         logging.error(f"保存失败:{url}")
-                        # 保存失败:加入 unsaved_set 并更新 unsaved_urls.txt
                         if url not in self.unsaved_set:
                             self.unsaved_set.add(url)
                             FileManager.update_unsaved_file(self.unsaved_urls_file, self.unsaved_set)
@@ -302,7 +270,7 @@ class WeiboCrawler:
                     failed += 1
 
             page += 1
-            time.sleep(self.interval + 2)  # 增加页面切换间隔
+            time.sleep(self.interval + 2)
 
         elapsed = time.time() - start_time
         logging.info("\n====== 统计结果 ======")
@@ -313,7 +281,6 @@ class WeiboCrawler:
 
 
 def setup_logger(save_dir):
-    """配置日志记录器"""
     log_file = os.path.join(save_dir, f"weibo_crawler_{datetime.now().strftime('%Y%m%d%H%M')}.log")
     logging.basicConfig(
         level=logging.INFO,
@@ -333,17 +300,30 @@ def main():
     uid = input(f"请输入用户ID(默认{DEFAULT_UID}): ") or DEFAULT_UID
     save_dir = input(f"请输入保存目录(默认{DEFAULT_SAVE_DIR}): ") or DEFAULT_SAVE_DIR
     interval = int(input("请输入请求间隔(秒,默认5): ") or 5)
-    os.makedirs(save_dir, exist_ok=True)
-    log_file = setup_logger(save_dir)
 
-    # 初始化 SESSION(使用代码中设置的 COOKIES)
+    # 初始化 SESSION
     SESSION.headers.update({
         'User-Agent': 'Mozilla/5.0 (Linux; Android 11; Mi 10) AppleWebKit/537.36 (KHTML, like Gecko)'
                       'Chrome/91.0.4472.124 Mobile Safari/537.36',
         'Cookie': COOKIES
     })
 
-    crawler = WeiboCrawler(uid, save_dir, interval)
+    # 创建 WeiboClient 实例并获取用户微博名称
+    client = WeiboClient(uid)
+    screen_name = client.get_user_screen_name()
+    if not screen_name:
+        screen_name = uid  # 若获取失败，使用用户ID作为文件夹名
+
+    # 清理文件夹名并创建新目录
+    folder_name = WeiboUtils.get_valid_filename(screen_name)
+    new_save_dir = os.path.join(save_dir, folder_name)
+    os.makedirs(new_save_dir, exist_ok=True)
+
+    # 设置日志
+    log_file = setup_logger(new_save_dir)
+
+    # 创建并运行爬虫
+    crawler = WeiboCrawler(uid, new_save_dir, interval)
     crawler.crawl()
 
 
