@@ -9,21 +9,27 @@ from urllib.parse import urlparse
 
 # 在此处填写你的微博 Cookie(必需)
 COOKIES = ""
+#纯文字内容单独存储到一个文件夹
+
+#未下载
 #2683370593 谢安然
-#5839848157粽子淞
 #2668367923病院坂saki
 #1664562813河野華
-#6136736001绿子
 #2692299095馨心_Mia
 #1877891953腥味猫罐
 #1909576453走路摇ZLY
+
+
+#5839848157粽子淞
+#6136736001绿子
+
 
 #已经下载
 #1923024604绮太郎
 #5491928243 bbb
 # 基础配置
-DEFAULT_UID = ["1923024604,5491928243"]  # 修改为默认包含多个用户ID
-DEFAULT_SAVE_DIR = "C:\\Base1\\bbb\\weibo"
+DEFAULT_UID = ["6136736001,5839848157"]  # 修改为默认包含多个用户ID
+DEFAULT_SAVE_DIR = "D:\\测试"
 SESSION = requests.Session()
 
 # URLManager 类保持不变
@@ -185,13 +191,20 @@ class WeiboClient:
             'url': f"https://weibo.com/{mblog.get('user', {}).get('id')}/{mblog.get('bid')}"
         }
 
+    #weibo微博保存函数
     def save_weibo(self, weibo, save_dir):
-        base_dir = os.path.join(save_dir, f"{weibo['time']}-{WeiboUtils.get_valid_filename(weibo['content'])}")
+        # 新增逻辑：区分纯文字内容和其他的内容
+        if not weibo['pics'] and not weibo['video']:
+            base_dir = os.path.join(save_dir, "txt", f"{weibo['time']}-{WeiboUtils.get_valid_filename(weibo['content'])}")
+        else:
+            base_dir = os.path.join(save_dir, f"{weibo['time']}-{WeiboUtils.get_valid_filename(weibo['content'])}")
+        
         actual_path = WeiboUtils.safe_mkdir(base_dir)
         txt_path = os.path.join(actual_path, "content.txt")
         if not os.path.exists(txt_path):
             with open(txt_path, 'w', encoding='utf-8') as f:
                 f.write(f"内容:{weibo['content']}\n链接:{weibo['url']}")
+        
         media_count = 1
         for media in weibo['pics']:
             if media['type'] == 'image':
@@ -206,12 +219,13 @@ class WeiboClient:
                 if not WeiboUtils.download_media(media['mov_url'], mov_path):
                     return False
             media_count += 1
+        
         if weibo['video']:
             video_path = os.path.join(actual_path, "video.mp4")
             WeiboUtils.download_media(weibo['video'], video_path)
         return True
 
-# WeiboCrawler 类保持不变
+
 class WeiboCrawler:
     """整体爬虫配置"""
     def __init__(self, uid, save_dir, interval):
@@ -331,21 +345,23 @@ def main():
     for uid in uid_list:
         client = WeiboClient(uid)
         screen_name = client.get_user_screen_name()
+        
+        # 处理昵称为空的情况
         if not screen_name:
-            screen_name = uid  # 若获取失败，使用用户ID作为文件夹名
-
-        # 清理文件夹名并创建新目录
-        folder_name = WeiboUtils.get_valid_filename(screen_name)
+            screen_name = f"unknown_{uid}"
+        
+        # 生成 screen_name_uid 格式的目录名
+        folder_name = f"{WeiboUtils.get_valid_filename(screen_name)}_{uid}"
         user_save_dir = os.path.join(save_dir, folder_name)
         os.makedirs(user_save_dir, exist_ok=True)
-
+        
         # 设置日志
         setup_logger(user_save_dir)
-
+        
         # 创建并运行爬虫
         crawler = WeiboCrawler(uid, user_save_dir, interval)
         crawler.crawl()
-        print(f"{screen_name} 遍历结束------------------")
+        print(f"{folder_name} 遍历结束------------------")
 
 if __name__ == "__main__":
     main()
