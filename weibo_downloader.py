@@ -18,11 +18,11 @@ COOKIES = ""
 #1877891953腥味猫罐
 #1909576453走路摇ZLY
 
-
+#已经下载
 #1923024604绮太郎
 #5491928243 bbb
 # 基础配置
-DEFAULT_UID = "1923024604,5491928243"  # 修改为默认包含多个用户ID
+DEFAULT_UID = ["1923024604,5491928243"]  # 修改为默认包含多个用户ID
 DEFAULT_SAVE_DIR = "C:\\Base1\\bbb\\weibo"
 SESSION = requests.Session()
 
@@ -303,12 +303,20 @@ def setup_logger(save_dir):
     return log_file
 
 # 修改 main 函数以支持批量爬取
+# 修改 main 函数以支持批量爬取
 def main():
     print("赵喵喵5839848157 半年可见")
     print("Kitaro绮太郎1923024604 半年可见")
     print("坂坂白 5491928243 半年可见\n")
-    uids = input(f"请输入用户ID(多个ID用逗号分隔,默认{DEFAULT_UID}): ") or DEFAULT_UID
-    uid_list = [uid.strip() for uid in uids.split(',')]  # 解析多个用户ID
+    
+    # 处理用户输入
+    default_uid_str = ','.join(DEFAULT_UID)
+    uid_input = input(f"请输入用户ID(多个ID用逗号分隔,默认{default_uid_str}): ").strip()
+    if uid_input:
+        uid_list = [uid.strip() for uid in uid_input.split(',')]
+    else:
+        uid_list = DEFAULT_UID.copy()
+    
     save_dir = input(f"请输入保存目录(默认{DEFAULT_SAVE_DIR}): ") or DEFAULT_SAVE_DIR
     interval = int(input("请输入请求间隔(秒,默认5): ") or 5)
 
@@ -319,7 +327,7 @@ def main():
         'Cookie': COOKIES
     })
 
-   # 遍历每个用户ID，进行爬取
+    # 遍历每个用户ID，进行爬取
     for uid in uid_list:
         client = WeiboClient(uid)
         screen_name = client.get_user_screen_name()
@@ -337,7 +345,7 @@ def main():
         # 创建并运行爬虫
         crawler = WeiboCrawler(uid, user_save_dir, interval)
         crawler.crawl()
-        print(f"{screen_name} 遍历结束------------------")  # 新增的结束提示
+        print(f"{screen_name} 遍历结束------------------")
 
 if __name__ == "__main__":
     main()
