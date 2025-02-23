@@ -6,17 +6,27 @@ import requests
 from datetime import datetime
 import logging
 from urllib.parse import urlparse
-#使其在指定目录下根据用户数字ID获取微博名称并新建一个文件夹
-# 所有生成的txt文件和保存的文件夹都存储在这个新建文件夹中
 
 # 在此处填写你的微博 Cookie(必需)
 COOKIES = ""
+#2683370593 谢安然
+#5839848157粽子淞
+#2668367923病院坂saki
+#1664562813河野華
+#6136736001绿子
+#2692299095馨心_Mia
+#1877891953腥味猫罐
+#1909576453走路摇ZLY
 
+
+#1923024604绮太郎
+#5491928243 bbb
 # 基础配置
-DEFAULT_UID = "谢安然 2683370593"
+DEFAULT_UID = "1923024604,5491928243"  # 修改为默认包含多个用户ID
 DEFAULT_SAVE_DIR = "C:\\Base1\\bbb\\weibo"
 SESSION = requests.Session()
 
+# URLManager 类保持不变
 class URLManager:
     """管理已成功保存的 URL,防止重复下载"""
     def __init__(self):
@@ -34,7 +44,7 @@ class URLManager:
     def get_all_urls(self):
         return list(self.visited)
 
-
+# FileManager 类保持不变
 class FileManager:
     """管理 URL 文件的加载、追加及更新"""
     @staticmethod
@@ -55,7 +65,7 @@ class FileManager:
             for url in unsaved_set:
                 f.write(url + "\n")
 
-
+# WeiboUtils 类保持不变
 class WeiboUtils:
     """工具方法集合"""
     @staticmethod
@@ -99,7 +109,7 @@ class WeiboUtils:
             logging.error(f"下载失败 {url}:{str(e)}")
         return False
 
-
+# WeiboClient 类保持不变
 class WeiboClient:
     """封装微博相关的接口调用与数据解析"""
     def __init__(self, uid):
@@ -201,7 +211,7 @@ class WeiboClient:
             WeiboUtils.download_media(weibo['video'], video_path)
         return True
 
-
+# WeiboCrawler 类保持不变
 class WeiboCrawler:
     """整体爬虫配置"""
     def __init__(self, uid, save_dir, interval):
@@ -279,7 +289,7 @@ class WeiboCrawler:
         logging.info(f"失败数量:{failed} 条")
         logging.info(f"耗时:{elapsed:.2f} 秒")
 
-
+# setup_logger 函数保持不变
 def setup_logger(save_dir):
     log_file = os.path.join(save_dir, f"weibo_crawler_{datetime.now().strftime('%Y%m%d%H%M')}.log")
     logging.basicConfig(
@@ -292,12 +302,13 @@ def setup_logger(save_dir):
     )
     return log_file
 
-
+# 修改 main 函数以支持批量爬取
 def main():
     print("赵喵喵5839848157 半年可见")
     print("Kitaro绮太郎1923024604 半年可见")
     print("坂坂白 5491928243 半年可见\n")
-    uid = input(f"请输入用户ID(默认{DEFAULT_UID}): ") or DEFAULT_UID
+    uids = input(f"请输入用户ID(多个ID用逗号分隔,默认{DEFAULT_UID}): ") or DEFAULT_UID
+    uid_list = [uid.strip() for uid in uids.split(',')]  # 解析多个用户ID
     save_dir = input(f"请输入保存目录(默认{DEFAULT_SAVE_DIR}): ") or DEFAULT_SAVE_DIR
     interval = int(input("请输入请求间隔(秒,默认5): ") or 5)
 
@@ -308,24 +319,25 @@ def main():
         'Cookie': COOKIES
     })
 
-    # 创建 WeiboClient 实例并获取用户微博名称
-    client = WeiboClient(uid)
-    screen_name = client.get_user_screen_name()
-    if not screen_name:
-        screen_name = uid  # 若获取失败，使用用户ID作为文件夹名
+   # 遍历每个用户ID，进行爬取
+    for uid in uid_list:
+        client = WeiboClient(uid)
+        screen_name = client.get_user_screen_name()
+        if not screen_name:
+            screen_name = uid  # 若获取失败，使用用户ID作为文件夹名
 
-    # 清理文件夹名并创建新目录
-    folder_name = WeiboUtils.get_valid_filename(screen_name)
-    new_save_dir = os.path.join(save_dir, folder_name)
-    os.makedirs(new_save_dir, exist_ok=True)
+        # 清理文件夹名并创建新目录
+        folder_name = WeiboUtils.get_valid_filename(screen_name)
+        user_save_dir = os.path.join(save_dir, folder_name)
+        os.makedirs(user_save_dir, exist_ok=True)
 
-    # 设置日志
-    log_file = setup_logger(new_save_dir)
+        # 设置日志
+        setup_logger(user_save_dir)
 
-    # 创建并运行爬虫
-    crawler = WeiboCrawler(uid, new_save_dir, interval)
-    crawler.crawl()
-
+        # 创建并运行爬虫
+        crawler = WeiboCrawler(uid, user_save_dir, interval)
+        crawler.crawl()
+        print(f"{screen_name} 遍历结束------------------")  # 新增的结束提示
 
 if __name__ == "__main__":
     main()
