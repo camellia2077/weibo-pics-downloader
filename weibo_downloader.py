@@ -7,9 +7,11 @@ from datetime import datetime
 import logging
 from urllib.parse import urlparse
 import random
-#增加随机时间延迟
+#输出信息增加时间
+#间隔延迟修改数据类型为float
+
 # 在此处填写你的微博 Cookie(必需)
-COOKIES = "XSRF-TOKEN="
+COOKIES = ""
 
 # 基础配置
 DEFAULT_UID = "2683370593"
@@ -241,7 +243,7 @@ class WeiboCrawler:
                 try:
                     if self.client.save_weibo(weibo, self.save_dir):
                         success += 1
-                        logging.info(f"成功保存:{weibo['content']}")
+                        logging.info(f"成功保存:{weibo['time'][:10]}{weibo['content']}")
                         self.url_manager.add_url(url)
                         FileManager.append_url(self.saved_urls_file, url)
                         if url in self.unsaved_set:
