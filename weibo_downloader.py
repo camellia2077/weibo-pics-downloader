@@ -46,6 +46,7 @@ class Config:
 
     def get_uid_list(self):
         """获取 UID 列表，支持用户输入或使用默认值"""
+        #坂坂白_5491928243 病院坂saki_2668367923
         default_uid = [
             "5491928243", "2668367923"  # 默认的微博用户ID
         ]
@@ -297,7 +298,9 @@ class WeiboClient:
     def save_weibo(self, weibo, save_dir):
     # 创建 plain_txt 文件夹
         plain_txt_dir = os.path.join(save_dir, "plain_txt")
+        plain_videos_dir = os.path.join(save_dir, "plain_videos")
         os.makedirs(plain_txt_dir, exist_ok=True)
+        os.makedirs(plain_videos_dir, exist_ok=True)
     
         if not weibo['pics'] and not weibo['video']:
             # 保存纯文本内容到 plain_txt 文件夹
@@ -305,15 +308,25 @@ class WeiboClient:
             txt_path = os.path.join(plain_txt_dir, txt_filename)
             with open(txt_path, 'w', encoding='utf-8') as f:
                 f.write(f"内容:{weibo['content']}\n链接:{weibo['url']}")
+        elif not weibo['pics'] and weibo['video']:
+            # 保存只有视频的内容到 plain_videos 文件夹
+            video_filename = f"{weibo['time']}-{WeiboUtils.get_valid_filename(weibo['content'])}.mp4"
+            
+            video_path = os.path.join(plain_videos_dir, video_filename)
+            if WeiboUtils.download_media(weibo['video'], video_path):
+                # 同时保存 content.txt
+                txt_filename = f"{weibo['time']}-{WeiboUtils.get_valid_filename(weibo['content'])}.txt"
+                txt_path = os.path.join(plain_videos_dir, txt_filename)
+                with open(txt_path, 'w', encoding='utf-8') as f:
+                    f.write(f"内容:{weibo['content']}\n链接:{weibo['url']}")
         else:
-            # 保存带有媒体的微博内容
+            # 保存带有图片的内容（无论是否有视频）到子文件夹
             base_dir = os.path.join(save_dir, f"{weibo['time']}-{WeiboUtils.get_valid_filename(weibo['content'])}")
             actual_path = WeiboUtils.safe_mkdir(base_dir)
             txt_path = os.path.join(actual_path, "content.txt")
             if not os.path.exists(txt_path):
                 with open(txt_path, 'w', encoding='utf-8') as f:
                     f.write(f"内容:{weibo['content']}\n链接:{weibo['url']}")
-        
             media_count = 1
             for media in weibo['pics']:
                 if media['type'] == 'image':
@@ -321,17 +334,17 @@ class WeiboClient:
                     if not WeiboUtils.download_media(media['jpg_url'], media_path):
                         return False
                 elif media['type'] == 'live':
-                    jpg_path = os.path.join(actual_path, f"live_photo_{media_count}.jpg")
-                    if not WeiboUtils.download_media(media['jpg_url'], jpg_path):
-                        return False
                     mov_path = os.path.join(actual_path, f"live_photo_{media_count}.mov")
                     if not WeiboUtils.download_media(media['mov_url'], mov_path):
                         return False
+                    jpg_path = os.path.join(actual_path, f"live_photo_{media_count}.jpg")
+                    if not WeiboUtils.download_media(media['jpg_url'], jpg_path):
+                        return False   
                 media_count += 1
 
-        if weibo['video']:
-            video_path = os.path.join(actual_path, "video.mp4")
-            WeiboUtils.download_media(weibo['video'], video_path)
+            if weibo['video']:
+                video_path = os.path.join(actual_path, "video.mp4")
+                WeiboUtils.download_media(weibo['video'], video_path)
         return True
 
 class DynamicProcessor:
