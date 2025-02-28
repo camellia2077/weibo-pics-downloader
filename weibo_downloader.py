@@ -7,7 +7,6 @@ from datetime import datetime
 import logging
 from urllib.parse import urlparse
 
-# 在此处填写你的微博 Cookie (必需)
 COOKIE = ""
 
 # 基础配置
@@ -46,11 +45,7 @@ class Config:
 
     def get_uid_list(self):
         """获取 UID 列表，支持用户输入或使用默认值"""
-        #"1923024604", "6136736001", "2136263191" 
-        default_uid = [
-            "2668367923", "5491928243", "2273396007",
-             # 默认的微博用户ID
-        ]
+        default_uid = ["2668367923", "5491928243", "2273396007"]
         result = ",".join(default_uid)
         print(f"回车默认下载 UID 为: {result}")
         uid_input = input("请输入用户 UID,多个 UID 用逗号分隔:").strip()
@@ -64,14 +59,13 @@ class Config:
         """通过微博 API 获取用户昵称，支持缓存"""
         if uid in self.username_cache:
             return self.username_cache[uid]
-
         url = f"https://m.weibo.cn/api/container/getIndex?type=uid&value={uid}"
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
             "Cookie": self.COOKIE
         }
         try:
-            time.sleep(3)  # 请求间隔，避免触发限制
+            time.sleep(3)
             response = requests.get(url, headers=headers, timeout=10)
             if response.status_code == 200:
                 data = response.json()
@@ -91,7 +85,6 @@ class Config:
             if os.path.isdir(subdir_path) and uid in subdir:
                 print(f'检测到同名文件夹 "{uid}"，跳过通过API获取用户名')
                 return subdir_path
-
         username = self.get_username(uid)
         new_folder_name = f"{username}_{uid}"
         new_folder_path = os.path.join(base_dir, new_folder_name)
@@ -159,41 +152,48 @@ class FileManager:
             f.write(url + "\n")
 
     @staticmethod
+    def append_date(file_path, date_str):
+        with open(file_path, "a", encoding="utf-8") as f:
+            f.write(date_str + "\n")
+
+    @staticmethod
     def update_unsaved_file(file_path, unsaved_set):
         with open(file_path, "w", encoding="utf-8") as f:
             for url in unsaved_set:
                 f.write(url + "\n")
 
-    def read_date_log(self):
+    def read_date_log_first_line(self):
         date_log_path = os.path.join(self.save_dir, 'date.log')
         if os.path.exists(date_log_path):
             with open(date_log_path, 'r', encoding='utf-8') as f:
-                return f.read().strip()
+                first_line = f.readline().strip()
+                if first_line:
+                    return first_line
         return None
 
-    def write_date_log(self, date_str):
+    def sort_date_log(self):#排序
         date_log_path = os.path.join(self.save_dir, 'date.log')
-        with open(date_log_path, 'w', encoding='utf-8') as f:
-            f.write(date_str)
+        if os.path.exists(date_log_path):
+            with open(date_log_path, 'r', encoding='utf-8') as f:
+                dates = [line.strip() for line in f if line.strip()]
+            if dates:
+                dates.sort(reverse=True)  # 大的在上（时间晚的在上）
+                with open(date_log_path, 'w', encoding='utf-8') as f:
+                    for date in dates:
+                        f.write(date + "\n")
 
 class WeiboUtils:
     """工具方法集合"""
     @staticmethod
     def clean_content(content):
-        # 去除 HTML 标签
         content = re.sub(r'<[^>]+>', '', content)
-        # 去除换行符和回车符，替换为空格
         content = re.sub(r'[\n\r]', ' ', content)
-        # 去除非法字符，保留中文、英文、数字、下划线、空格和连字符
         cleaned = re.sub(r'[^\u4e00-\u9fa5a-zA-Z0-9_\s-]', '', content)
-        # 将多个空白字符替换为单个空格，并去除首尾空白
         cleaned = re.sub(r'\s+', ' ', cleaned).rstrip()
-        # 取前 20 个字符，并去除末尾空格
         return cleaned[:20].rstrip()
 
     @staticmethod
     def get_valid_filename(name):
-        # 去除 Windows 文件名中的非法字符，包括换行符和回车符
         name = re.sub(r'[\\/*?:"<>|\n\r]', '', name)
         return name.rstrip()
 
@@ -271,10 +271,10 @@ class WeiboClient:
         try:
             dt = datetime.strptime(created_at, '%a %b %d %H:%M:%S %z %Y')
             time_str = dt.strftime("%Y-%m-%d-%H-%M-%S")
-            publish_time = dt.strftime("%Y%m%d%H%M")
+            publish_time = dt.strftime("%Y%m%d%H%M%S")  # 修改为 %Y%m%d%H%M%S 格式
         except:
             time_str = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-            publish_time = datetime.now().strftime("%Y%m%d%H%M")
+            publish_time = datetime.now().strftime("%Y%m%d%H%M%S")
         content = WeiboUtils.clean_content(mblog.get('text', ''))
         pics = []
         if 'pics' in mblog:
@@ -307,17 +307,12 @@ class WeiboClient:
         url = f"https://m.weibo.cn/statuses/show?id={bid}"
         try:
             response = SESSION.get(url, timeout=10)
-            # 记录请求和响应的详细信息
             logging.info(f"请求 URL: {url}")
             logging.info(f"响应状态码: {response.status_code}")
             logging.info(f"响应内容前200字符: {response.text[:200]}")
-
-            # 检查响应是否为空
             if not response.text.strip():
                 logging.error("响应内容为空")
                 return None
-        
-            # 尝试解析 JSON
             data = response.json()
             mblog = data.get('data')
             if mblog:
@@ -375,29 +370,34 @@ class WeiboClient:
             if weibo['video']:
                 video_path = os.path.join(actual_path, "video.mp4")
                 WeiboUtils.download_media(weibo['video'], video_path)
+        # 保存成功后，将发布时间追加到 date.log
+        date_log_path = os.path.join(save_dir, "date.log")
+        FileManager.append_date(date_log_path, weibo['publish_time'])
         return True
 
 class DynamicProcessor:
-    def __init__(self, file_manager, client, url_manager, date_log_num, method):
+    def __init__(self, file_manager, client, url_manager, cutoff_time, method):
         self.file_manager = file_manager
         self.client = client
         self.url_manager = url_manager
-        self.date_log_num = date_log_num
+        self.cutoff_time = cutoff_time  # 截止时间从 date.log 第一行读取
         self.method = method
-        self.first_date = None
 
     def process_dynamic(self, weibo):
         publish_time = weibo['publish_time']
 
         if self.method == 'date':
-            if self.first_date is None:
-                self.first_date = publish_time
-            if self.date_log_num and publish_time == self.date_log_num:
+            if self.cutoff_time and publish_time <= self.cutoff_time:
+                logging.info(f"达到或早于截止时间 {self.cutoff_time}，停止处理")
                 return False
 
-        if self.method == 'url' and self.url_manager.has_url(weibo['url']):
-            logging.info(f"这条已经保存:{weibo['url']}")
-            return True
+        if self.method == 'url':
+            if self.url_manager.has_url(weibo['url']):
+                logging.info(f"这条已经保存:{weibo['url']}")
+                return True
+            if self.cutoff_time and publish_time <= self.cutoff_time:
+                logging.info(f"发布时间 {publish_time} 早于截止时间 {self.cutoff_time}，跳过")
+                return True  # 跳过但不停止爬取
 
         if self.client.save_weibo(weibo, self.file_manager.save_dir):
             self.url_manager.add_url(weibo['url'])
@@ -407,10 +407,6 @@ class DynamicProcessor:
         else:
             logging.error(f"保存失败:{weibo['url']}")
             return False
-
-    def finalize(self):
-        if self.method == 'date' and self.first_date:
-            self.file_manager.write_date_log(self.first_date)
 
 class WeiboCrawler:
     def __init__(self, uid, save_dir, interval, method):
@@ -427,8 +423,8 @@ class WeiboCrawler:
         for url in FileManager.load_urls(self.saved_urls_file):
             self.url_manager.add_url(url)
         self.unsaved_set = set(FileManager.load_urls(self.unsaved_urls_file))
-        date_log_num = self.file_manager.read_date_log()
-        self.processor = DynamicProcessor(self.file_manager, self.client, self.url_manager, date_log_num, method)
+        cutoff_time = self.file_manager.read_date_log_first_line()  # 读取 date.log 第一行作为截止时间
+        self.processor = DynamicProcessor(self.file_manager, self.client, self.url_manager, cutoff_time, method)
 
     def crawl(self):
         containerid = self.client.get_containerid()
@@ -458,8 +454,9 @@ class WeiboCrawler:
                 total += 1
                 try:
                     if not self.processor.process_dynamic(weibo):
-                        logging.info(f"达到截止日期 {self.processor.date_log_num}，停止爬取")
-                        break
+                        if self.processor.method == 'date':
+                            logging.info(f"达到截止时间 {self.processor.cutoff_time}，停止爬取")
+                            break
                     if weibo['url'] in self.unsaved_set:
                         self.unsaved_set.remove(weibo['url'])
                         FileManager.update_unsaved_file(self.unsaved_urls_file, self.unsaved_set)
@@ -475,7 +472,8 @@ class WeiboCrawler:
             page += 1
             time.sleep(self.interval + 2)
 
-        self.processor.finalize()
+        # 爬取结束后对 date.log 进行排序
+        self.file_manager.sort_date_log()
 
         elapsed = time.time() - start_time
         logging.info("\n====== 统计结果 ======")
@@ -538,7 +536,7 @@ class OperationMenu:
                                 unsaved_urls = [line.strip() for line in f if line.strip()]
                             if unsaved_urls:
                                 print(f"\n重试文件夹: {dir_name} 的失败URL")
-                                uid = dir_name.split('_')[-1]  # Extract UID from folder name
+                                uid = dir_name.split('_')[-1]
                                 client = WeiboClient(uid)
                                 crawler = WeiboCrawler(uid, user_dir, self.config.interval, method='url')
                                 for url in unsaved_urls:
