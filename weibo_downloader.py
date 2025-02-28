@@ -1,3 +1,4 @@
+#修复按照时间截止的逻辑，遇到截止时间退出爬取
 import os
 import re
 import time
@@ -437,8 +438,9 @@ class WeiboCrawler:
         failed = 0
         page = 1
         start_time = time.time()
+        stop_crawling = False  # 新增停止标志
 
-        while True:
+        while not stop_crawling:  # 修改循环条件
             logging.info(f"正在获取第 {page} 页数据...")
             cards = self.client.fetch_list(containerid, page)
             if not cards:
@@ -446,6 +448,8 @@ class WeiboCrawler:
                 break
 
             for card in cards:
+                if stop_crawling:  # 检查是否应该停止
+                    break
                 if card.get('card_type') != 9:
                     continue
                 weibo = self.client.parse_weibo(card)
@@ -453,15 +457,18 @@ class WeiboCrawler:
                     continue
                 total += 1
                 try:
-                    if not self.processor.process_dynamic(weibo):
+                    process_result = self.processor.process_dynamic(weibo)
+                    if process_result is False:
                         if self.processor.method == 'date':
                             logging.info(f"达到截止时间 {self.processor.cutoff_time}，停止爬取")
-                            break
-                    if weibo['url'] in self.unsaved_set:
-                        self.unsaved_set.remove(weibo['url'])
-                        FileManager.update_unsaved_file(self.unsaved_urls_file, self.unsaved_set)
-                    success += 1
-                    time.sleep(self.interval)
+                            stop_crawling = True  # 设置停止标志
+                            break  # 跳出当前页的卡片循环
+                    if process_result:  # 处理成功时更新成功计数
+                        if weibo['url'] in self.unsaved_set:
+                            self.unsaved_set.remove(weibo['url'])
+                            FileManager.update_unsaved_file(self.unsaved_urls_file, self.unsaved_set)
+                        success += 1
+                        time.sleep(self.interval)
                 except Exception as e:
                     logging.error(f"保存异常:{str(e)}")
                     failed += 1
@@ -469,6 +476,8 @@ class WeiboCrawler:
                         self.unsaved_set.add(weibo['url'])
                         FileManager.update_unsaved_file(self.unsaved_urls_file, self.unsaved_set)
 
+            if stop_crawling:  # 跳出外层循环
+                break
             page += 1
             time.sleep(self.interval + 2)
 
@@ -589,7 +598,7 @@ def setup_logger(save_dir):
     return log_file
 
 def main():
-    print("赵喵喵5839848157 半年可见")
+    print("这是微博爬取的程序")
     print("Kitaro绮太郎1923024604 半年可见")
     print("坂坂白 5491928243 半年可见\n")
 
