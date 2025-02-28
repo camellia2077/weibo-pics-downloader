@@ -46,13 +46,14 @@ class Config:
 
     def get_uid_list(self):
         """获取 UID 列表，支持用户输入或使用默认值"""
-        #坂坂白_5491928243 病院坂saki_2668367923
+        #"1923024604", "6136736001", "2136263191" 
         default_uid = [
-            "5491928243", "2668367923"  # 默认的微博用户ID
+            "2668367923", "5491928243", "2273396007",
+             # 默认的微博用户ID
         ]
         result = ",".join(default_uid)
         print(f"回车默认下载 UID 为: {result}")
-        uid_input = input("请输入用户 UID，多个 UID 用逗号分隔:").strip()
+        uid_input = input("请输入用户 UID,多个 UID 用逗号分隔:").strip()
         if uid_input:
             uid_list = [uid.strip() for uid in uid_input.split(',')]
         else:
@@ -117,8 +118,8 @@ class Config:
         self.uid = uid
         self.download_dir = self.get_download_dir(self.base_dir, uid)
         self.username = self.get_username(uid)
-        self.saved_url_filename = os.path.join(self.download_dir, "saved_url.txt")
-        self.unsaved_url_filename = os.path.join(self.download_dir, "unsaved_url.txt")
+        self.saved_url_filename = os.path.join(self.download_dir, "saved_urls.log")
+        self.unsaved_url_filename = os.path.join(self.download_dir, "unsaved_urls.log")
         self.date_log_filename = os.path.join(self.download_dir, "date.log")
         if not os.path.exists(self.download_dir):
             os.makedirs(self.download_dir)
@@ -179,14 +180,22 @@ class WeiboUtils:
     """工具方法集合"""
     @staticmethod
     def clean_content(content):
+        # 去除 HTML 标签
         content = re.sub(r'<[^>]+>', '', content)
+        # 去除换行符和回车符，替换为空格
+        content = re.sub(r'[\n\r]', ' ', content)
+        # 去除非法字符，保留中文、英文、数字、下划线、空格和连字符
         cleaned = re.sub(r'[^\u4e00-\u9fa5a-zA-Z0-9_\s-]', '', content)
-        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
-        return cleaned[:20]
+        # 将多个空白字符替换为单个空格，并去除首尾空白
+        cleaned = re.sub(r'\s+', ' ', cleaned).rstrip()
+        # 取前 20 个字符，并去除末尾空格
+        return cleaned[:20].rstrip()
 
     @staticmethod
     def get_valid_filename(name):
-        return re.sub(r'[\\/*?:"<>|]', "", name)
+        # 去除 Windows 文件名中的非法字符，包括换行符和回车符
+        name = re.sub(r'[\\/*?:"<>|\n\r]', '', name)
+        return name.rstrip()
 
     @staticmethod
     def safe_mkdir(path):
@@ -204,8 +213,7 @@ class WeiboUtils:
             return True
         try:
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Linux; Android 11; Mi 10) AppleWebKit/537.36 (KHTML, like Gecko)'
-                              'Chrome/91.0.4472.124 Mobile Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0',
                 'Referer': 'https://weibo.com/'
             }
             response = SESSION.get(url, headers=headers, stream=True, timeout=20)
@@ -295,33 +303,56 @@ class WeiboClient:
             'publish_time': publish_time
         }
 
+    def get_weibo_by_bid(self, bid):
+        url = f"https://m.weibo.cn/statuses/show?id={bid}"
+        try:
+            response = SESSION.get(url, timeout=10)
+            # 记录请求和响应的详细信息
+            logging.info(f"请求 URL: {url}")
+            logging.info(f"响应状态码: {response.status_code}")
+            logging.info(f"响应内容前200字符: {response.text[:200]}")
+
+            # 检查响应是否为空
+            if not response.text.strip():
+                logging.error("响应内容为空")
+                return None
+        
+            # 尝试解析 JSON
+            data = response.json()
+            mblog = data.get('data')
+            if mblog:
+                return self.parse_weibo({'mblog': mblog})
+            else:
+                logging.error("响应中未找到 'data' 字段")
+                return None
+        except json.JSONDecodeError as e:
+            logging.error(f"JSON 解析错误: {str(e)}，响应内容: {response.text[:500]}")
+            return None
+        except Exception as e:
+            logging.error(f"获取单条微博失败: {str(e)}")
+            return None
+
     def save_weibo(self, weibo, save_dir):
-    # 创建 plain_txt 文件夹
         plain_txt_dir = os.path.join(save_dir, "plain_txt")
         plain_videos_dir = os.path.join(save_dir, "plain_videos")
         os.makedirs(plain_txt_dir, exist_ok=True)
         os.makedirs(plain_videos_dir, exist_ok=True)
-    
+
         if not weibo['pics'] and not weibo['video']:
-            # 保存纯文本内容到 plain_txt 文件夹
             txt_filename = f"{weibo['time']}-{WeiboUtils.get_valid_filename(weibo['content'])}.txt"
             txt_path = os.path.join(plain_txt_dir, txt_filename)
             with open(txt_path, 'w', encoding='utf-8') as f:
                 f.write(f"内容:{weibo['content']}\n链接:{weibo['url']}")
         elif not weibo['pics'] and weibo['video']:
-            # 保存只有视频的内容到 plain_videos 文件夹
             video_filename = f"{weibo['time']}-{WeiboUtils.get_valid_filename(weibo['content'])}.mp4"
-            
             video_path = os.path.join(plain_videos_dir, video_filename)
             if WeiboUtils.download_media(weibo['video'], video_path):
-                # 同时保存 content.txt
                 txt_filename = f"{weibo['time']}-{WeiboUtils.get_valid_filename(weibo['content'])}.txt"
                 txt_path = os.path.join(plain_videos_dir, txt_filename)
                 with open(txt_path, 'w', encoding='utf-8') as f:
                     f.write(f"内容:{weibo['content']}\n链接:{weibo['url']}")
         else:
-            # 保存带有图片的内容（无论是否有视频）到子文件夹
-            base_dir = os.path.join(save_dir, f"{weibo['time']}-{WeiboUtils.get_valid_filename(weibo['content'])}")
+            base_dir = os.path.join(save_dir, f"{weibo['time']}-{WeiboUtils.get_valid_filename(weibo['content'])}").rstrip()
             actual_path = WeiboUtils.safe_mkdir(base_dir)
             txt_path = os.path.join(actual_path, "content.txt")
             if not os.path.exists(txt_path):
@@ -339,9 +370,8 @@ class WeiboClient:
                         return False
                     jpg_path = os.path.join(actual_path, f"live_photo_{media_count}.jpg")
                     if not WeiboUtils.download_media(media['jpg_url'], jpg_path):
-                        return False   
+                        return False
                 media_count += 1
-
             if weibo['video']:
                 video_path = os.path.join(actual_path, "video.mp4")
                 WeiboUtils.download_media(weibo['video'], video_path)
@@ -358,25 +388,25 @@ class DynamicProcessor:
 
     def process_dynamic(self, weibo):
         publish_time = weibo['publish_time']
-        
+
         if self.method == 'date':
             if self.first_date is None:
                 self.first_date = publish_time
             if self.date_log_num and publish_time == self.date_log_num:
                 return False
-        
+
         if self.method == 'url' and self.url_manager.has_url(weibo['url']):
             logging.info(f"这条已经保存:{weibo['url']}")
             return True
-        
+
         if self.client.save_weibo(weibo, self.file_manager.save_dir):
             self.url_manager.add_url(weibo['url'])
-            self.file_manager.append_url(os.path.join(self.file_manager.save_dir, "saved_urls.txt"), weibo['url'])
+            self.file_manager.append_url(os.path.join(self.file_manager.save_dir, "saved_urls.log"), weibo['url'])
             logging.info(f"成功保存:{weibo['content']}")
             return True
         else:
             logging.error(f"保存失败:{weibo['url']}")
-            return True
+            return False
 
     def finalize(self):
         if self.method == 'date' and self.first_date:
@@ -390,8 +420,8 @@ class WeiboCrawler:
         self.client = WeiboClient(uid)
         self.url_manager = URLManager()
         self.file_manager = FileManager(save_dir)
-        self.saved_urls_file = os.path.join(save_dir, "saved_urls.txt")
-        self.unsaved_urls_file = os.path.join(save_dir, "unsaved_urls.txt")
+        self.saved_urls_file = os.path.join(save_dir, "saved_urls.log")
+        self.unsaved_urls_file = os.path.join(save_dir, "unsaved_urls.log")
         if not os.path.exists(self.unsaved_urls_file):
             open(self.unsaved_urls_file, "w", encoding="utf-8").close()
         for url in FileManager.load_urls(self.saved_urls_file):
@@ -470,8 +500,8 @@ class OperationMenu:
             if choice == "1":
                 method_choice = input(
                     "请选择保存方法:\n"
-                    "1. 使用 date.log 截止日期停止，不检查 saved_url.txt\n"
-                    "2. 检查 saved_url.txt，不使用 date.log 截止日期\n"
+                    "1. 使用 date.log 截止日期停止，不检查 saved_urls.log\n"
+                    "2. 检查 saved_urls.log，不使用 date.log 截止日期\n"
                     "请输入数字: "
                 ).strip()
                 if method_choice == "1":
@@ -481,7 +511,7 @@ class OperationMenu:
                 else:
                     print("无效选择，默认使用方法1")
                     method = 'date'
-                
+
                 for uid in self.config.uid_list:
                     print(f"\n开始下载UID: {uid}")
                     self.config.update_for_uid(uid)
@@ -499,17 +529,30 @@ class OperationMenu:
                     print("\n")
                     time.sleep(long_interval)
             elif choice == "2":
-                for uid in self.config.uid_list:
-                    print(f"\n重试UID: {uid} 的失败URL")
-                    self.config.update_for_uid(uid)
-                    client = WeiboClient(uid)
-                    screen_name = client.get_user_screen_name() or f"unknown_{uid}"
-                    folder_name = f"{WeiboUtils.get_valid_filename(screen_name)}_{uid}"
-                    user_save_dir = os.path.join(self.config.download_dir, folder_name)
-                    os.makedirs(user_save_dir, exist_ok=True)
-                    setup_logger(user_save_dir)
-                    crawler = WeiboCrawler(uid, user_save_dir, self.config.interval, method='url')
-                    crawler.crawl()
+                for root, dirs, files in os.walk(self.config.base_dir):
+                    for dir_name in dirs:
+                        user_dir = os.path.join(root, dir_name)
+                        unsaved_file = os.path.join(user_dir, "unsaved_urls.log")
+                        if os.path.exists(unsaved_file):
+                            with open(unsaved_file, "r", encoding="utf-8") as f:
+                                unsaved_urls = [line.strip() for line in f if line.strip()]
+                            if unsaved_urls:
+                                print(f"\n重试文件夹: {dir_name} 的失败URL")
+                                uid = dir_name.split('_')[-1]  # Extract UID from folder name
+                                client = WeiboClient(uid)
+                                crawler = WeiboCrawler(uid, user_dir, self.config.interval, method='url')
+                                for url in unsaved_urls:
+                                    bid = extract_bid_from_url(url)
+                                    if bid:
+                                        weibo = client.get_weibo_by_bid(bid)
+                                        if weibo and crawler.processor.process_dynamic(weibo):
+                                            crawler.unsaved_set.remove(url)
+                                            FileManager.update_unsaved_file(unsaved_file, crawler.unsaved_set)
+                                            FileManager.append_url(os.path.join(user_dir, "saved_urls.log"), url)
+                                            logging.info(f"成功保存:{url}")
+                                        else:
+                                            logging.error(f"保存失败:{url}")
+                                    time.sleep(self.config.interval)
             elif choice == "3":
                 print("程序退出")
                 break
@@ -525,6 +568,15 @@ class OperationMenu:
             print(f"UID列表已更新为: {self.config.uid_list}")
         else:
             print("UID列表未更改")
+
+def extract_bid_from_url(url):
+    parsed = urlparse(url)
+    path_parts = parsed.path.split('/')
+    if len(path_parts) >= 3 and path_parts[2]:
+        bid = path_parts[2]
+        logging.info(f"从 URL {url} 提取到的 bid: {bid}")
+        return bid
+    return None
 
 def setup_logger(save_dir):
     log_file = os.path.join(save_dir, f"weibo_crawler_{datetime.now().strftime('%Y%m%d%H%M')}.log")
@@ -542,11 +594,10 @@ def main():
     print("赵喵喵5839848157 半年可见")
     print("Kitaro绮太郎1923024604 半年可见")
     print("坂坂白 5491928243 半年可见\n")
-    
+
     config = Config()
     SESSION.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 11; Mi 10) AppleWebKit/537.36 (KHTML, like Gecko)'
-                      'Chrome/91.0.4472.124 Mobile Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0',
         'Cookie': config.COOKIE
     })
 
