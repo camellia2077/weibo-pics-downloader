@@ -1,4 +1,3 @@
-#修复按照时间截止的逻辑，遇到截止时间退出爬取
 import os
 import re
 import time
@@ -7,8 +6,6 @@ import requests
 from datetime import datetime
 import logging
 from urllib.parse import urlparse
-
-COOKIE = ""
 
 # 基础配置
 SESSION = requests.Session()
@@ -34,15 +31,13 @@ class Config:
 
     def get_cookie(self):
         """获取并验证微博 Cookie"""
-        global COOKIE
         cookie_length = 100
-        if len(COOKIE) > cookie_length:
-            return COOKIE
-        else:
-            while len(COOKIE) <= cookie_length:
-                print(f"Cookie 长度小于 {cookie_length}，全局变量 COOKIE 的长度太短，可能是错误的，请重新输入")
-                COOKIE = input("请输入微博 Cookie（必填）:").strip()
-            return COOKIE
+        while True:
+            cookie = input("请输入微博 Cookie（必填）:").strip()
+            if len(cookie) > cookie_length:
+                return cookie
+            else:
+                print(f"Cookie 长度小于 {cookie_length}，请重新输入")
 
     def get_uid_list(self):
         """获取 UID 列表，支持用户输入或使用默认值"""
@@ -229,13 +224,18 @@ class WeiboUtils:
 
 class WeiboClient:
     """封装微博相关的接口调用与数据解析"""
-    def __init__(self, uid):
+    def __init__(self, uid, cookie):
         self.uid = uid
+        self.cookie = cookie
 
     def get_containerid(self):
         profile_url = f"https://m.weibo.cn/api/container/getIndex?type=uid&value={self.uid}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
+            "Cookie": self.cookie
+        }
         try:
-            response = SESSION.get(profile_url, timeout=10)
+            response = SESSION.get(profile_url, headers=headers, timeout=10)
             data = response.json()
             for tab in data.get('data', {}).get('tabsInfo', {}).get('tabs', []):
                 if tab.get('tab_type') == 'weibo':
@@ -246,8 +246,12 @@ class WeiboClient:
 
     def get_user_screen_name(self):
         profile_url = f"https://m.weibo.cn/api/container/getIndex?type=uid&value={self.uid}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
+            "Cookie": self.cookie
+        }
         try:
-            response = SESSION.get(profile_url, timeout=10)
+            response = SESSION.get(profile_url, headers=headers, timeout=10)
             data = response.json()
             return data.get('data', {}).get('userInfo', {}).get('screen_name', '')
         except Exception as e:
@@ -256,8 +260,12 @@ class WeiboClient:
 
     def fetch_list(self, containerid, page=1):
         api_url = f"https://m.weibo.cn/api/container/getIndex?containerid={containerid}&page={page}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
+            "Cookie": self.cookie
+        }
         try:
-            response = SESSION.get(api_url, timeout=15)
+            response = SESSION.get(api_url, headers=headers, timeout=15)
             data = response.json()
             return data.get('data', {}).get('cards', [])
         except Exception as e:
@@ -306,8 +314,12 @@ class WeiboClient:
 
     def get_weibo_by_bid(self, bid):
         url = f"https://m.weibo.cn/statuses/show?id={bid}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
+            "Cookie": self.cookie
+        }
         try:
-            response = SESSION.get(url, timeout=10)
+            response = SESSION.get(url, headers=headers, timeout=10)
             logging.info(f"请求 URL: {url}")
             logging.info(f"响应状态码: {response.status_code}")
             logging.info(f"响应内容前200字符: {response.text[:200]}")
@@ -410,11 +422,11 @@ class DynamicProcessor:
             return False
 
 class WeiboCrawler:
-    def __init__(self, uid, save_dir, interval, method):
+    def __init__(self, uid, save_dir, interval, method, cookie):
         self.uid = uid
         self.save_dir = save_dir
         self.interval = interval
-        self.client = WeiboClient(uid)
+        self.client = WeiboClient(uid, cookie)
         self.url_manager = URLManager()
         self.file_manager = FileManager(save_dir)
         self.saved_urls_file = os.path.join(save_dir, "saved_urls.log")
@@ -522,13 +534,13 @@ class OperationMenu:
                 for uid in self.config.uid_list:
                     print(f"\n开始下载UID: {uid}")
                     self.config.update_for_uid(uid)
-                    client = WeiboClient(uid)
+                    client = WeiboClient(uid, self.config.COOKIE)
                     screen_name = client.get_user_screen_name() or f"unknown_{uid}"
                     folder_name = f"{WeiboUtils.get_valid_filename(screen_name)}_{uid}"
                     user_save_dir = os.path.join(self.config.base_dir, folder_name)
                     os.makedirs(user_save_dir, exist_ok=True)
                     setup_logger(user_save_dir)
-                    crawler = WeiboCrawler(uid, user_save_dir, self.config.interval, method)
+                    crawler = WeiboCrawler(uid, user_save_dir, self.config.interval, method, self.config.COOKIE)
                     crawler.crawl()
                     long_interval = 4.44
                     print("\n")
@@ -546,8 +558,8 @@ class OperationMenu:
                             if unsaved_urls:
                                 print(f"\n重试文件夹: {dir_name} 的失败URL")
                                 uid = dir_name.split('_')[-1]
-                                client = WeiboClient(uid)
-                                crawler = WeiboCrawler(uid, user_dir, self.config.interval, method='url')
+                                client = WeiboClient(uid, self.config.COOKIE)
+                                crawler = WeiboCrawler(uid, user_dir, self.config.interval, method='url', cookie=self.config.COOKIE)
                                 for url in unsaved_urls:
                                     bid = extract_bid_from_url(url)
                                     if bid:
